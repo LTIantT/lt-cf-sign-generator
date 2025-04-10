@@ -6,6 +6,8 @@
   let price = '$9.99';
   let sku = 'ABC123';
   let templatePath = '/img/template.jpg';
+  // New state for custom title font size
+  let titleFontSize: number | null = null;
   
   // Status state for API requests
   let isLoading = false;
@@ -69,6 +71,17 @@
       isLoading = false;
     }
   }
+
+  // Reset form to defaults
+  function resetForm() {
+    title = 'Product Name';
+    price = '$9.99';
+    sku = 'ABC123';
+    templatePath = templates[0].path;
+    titleFontSize = null; // Reset to auto font size
+    errorMessage = '';
+    successMessage = '';
+  }
 </script>
 
 <div class="min-h-screen bg-gray-50 py-8">
@@ -115,17 +128,46 @@
             <label for="title" class="block text-sm font-medium text-gray-700 mb-1">
               Title
             </label>
-            <input
-              id="title"
-              type="text"
-              bind:value={title}
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Enter product title"
-            />
-            <p class="mt-1 text-xs text-gray-500">
-              This will appear in white with a black outline (max 2 lines)
-            </p>
-          </div>
+            <div class="flex gap-2 items-end">
+              <div class="flex-1">
+              <input
+                id="title"
+                type="text"
+                bind:value={title}
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Enter product title"
+              />
+              </div>
+              <div class="w-24">
+              <label for="titleFontSize" class="block text-xs font-medium text-gray-700 mb-1">
+                Font Size
+              </label>
+              <input
+                id="titleFontSize"
+                type="number"
+                bind:value={titleFontSize}
+                min="1"
+                max="312"
+                placeholder="Auto"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              </div>
+            </div>
+            </div>
+            <div class="flex justify-between mt-1">
+              <p class="text-xs text-gray-500">
+                This will appear in white with a black outline (max 2 lines)
+              </p>
+              {#if titleFontSize !== null}
+                <button
+                  type="button"
+                  class="text-xs text-indigo-600 hover:text-indigo-800"
+                  on:click={() => titleFontSize = null}
+                >
+                  Reset to auto
+                </button>
+              {/if}
+            </div>
           
           <div>
             <label for="price" class="block text-sm font-medium text-gray-700 mb-1">
@@ -205,26 +247,17 @@
             <button
               type="button"
               class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              on:click={() => {
-                // Reset form to defaults
-                title = 'Product Name';
-                price = '$9.99';
-                sku = 'ABC123';
-                templatePath = templates[0].path;
-                errorMessage = '';
-                successMessage = '';
-              }}
+              on:click={resetForm}
             >
               Reset
             </button>
           </div>
-        </form>
       </div>
       
       <!-- Preview Column -->
       <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-lg font-medium text-gray-800 mb-4">Preview</h2>
-        <CanvasPreview {title} {price} {sku} {templatePath} />
+        <CanvasPreview {title} {price} {sku} {templatePath} {titleFontSize} />
       </div>
     </div>
   </div>

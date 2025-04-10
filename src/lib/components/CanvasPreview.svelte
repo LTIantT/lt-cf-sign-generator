@@ -8,6 +8,8 @@
   export let price: string = '';
   export let sku: string = '';
   export let templatePath: string = '/img/template/template.jpg';
+  // New prop for custom title font size (null means use auto-calculated size)
+  export let titleFontSize: number | null = null;
   
   // Canvas element reference
   let canvas: HTMLCanvasElement;
@@ -140,39 +142,48 @@
         continue;
       }
       
-      // For text with spaces, try to wrap text with this font size
-      const lines = [];
-      let line = '';
-      let lineCount = 1;
+      // For text with spaces, calculate how many lines it will take
+      let actualLineCount = 0;
+      let remainingWords = [...words]; // Clone the words array
       
-      // Simulate text wrapping
-      for (const word of words) {
-        const testLine = line + (line ? ' ' : '') + word;
-        const metrics = ctx.measureText(testLine);
+      // Keep processing until we're out of words or exceed the line limit
+      while (remainingWords.length > 0 && actualLineCount < numLines) {
+        actualLineCount++;
+        let line = '';
+        let wordIndex = 0;
         
-        if (metrics.width > boxWidth && line !== '') {
-          lines.push(line);
-          line = word;
-          lineCount++;
-        } else {
-          line = testLine;
+        // Try to fit as many words as possible in this line
+        while (wordIndex < remainingWords.length) {
+          const testLine = line + (line ? ' ' : '') + remainingWords[wordIndex];
+          const metrics = ctx.measureText(testLine);
+          
+          if (metrics.width <= boxWidth) {
+            line = testLine;
+            wordIndex++;
+          } else {
+            // Word doesn't fit, stop adding words to this line
+            break;
+          }
         }
+        
+        // If we couldn't fit any words on this line, it means even a single word is too wide
+        if (wordIndex === 0) {
+          max = mid - 1; // Font too big, reduce and try again
+          break;
+        }
+        
+        // Remove the words we've used for this line
+        remainingWords = remainingWords.slice(wordIndex);
       }
       
-      if (line) {
-        lines.push(line);
-      }
-      
-      // Calculate approximate height needed (line height is typically 1.2-1.5x font size)
-      const lineHeight = mid * 1.2;
-      const totalHeight = lineCount * lineHeight;
-      
-      // Check if text fits within constraints
-      if (lineCount <= numLines && totalHeight <= boxHeight) {
-        optimal = mid;  // This size works, but we might find a better one
-        min = mid + 1;  // Try a larger size
+      // Now check if all words fit within the allowed number of lines
+      if (remainingWords.length === 0 && actualLineCount <= numLines) {
+        // All words fit, this font size works, try larger
+        optimal = mid;
+        min = mid + 1;
       } else {
-        max = mid - 1;  // Too big, try a smaller size
+        // Not all words fit, or we needed more than the allowed number of lines
+        max = mid - 1;
       }
     }
     
@@ -182,37 +193,68 @@
   // Function to wrap text to fit within maxWidth
   function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number = 2) {
     const words = text.toUpperCase().split(' ');
-    let line = '';
     const lines: string[] = [];
     
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' ';
-      const metrics = ctx.measureText(testLine);
-      const testWidth = metrics.width;
+    // Use the same algorithm as in calculateOptimalFontSize to ensure consistent line breaking
+    let remainingWords = [...words];
+    let lineCount = 0;
+    
+    // Keep processing until we're out of words or reach the maximum lines
+    while (remainingWords.length > 0 && lineCount < maxLines) {
+      let line = '';
+      let wordIndex = 0;
       
-      if (testWidth > maxWidth && n > 0) {
-        lines.push(line);
-        line = words[n] + ' ';
-      } else {
-        line = testLine;
+      // Try to fit as many words as possible in this line
+      while (wordIndex < remainingWords.length) {
+        const testLine = line + (line ? ' ' : '') + remainingWords[wordIndex];
+        const metrics = ctx.measureText(testLine);
+        
+        if (metrics.width <= maxWidth) {
+          line = testLine;
+          wordIndex++;
+        } else {
+          // Word doesn't fit, stop adding words to this line
+          break;
+        }
       }
+      
+      // Edge case: if we couldn't fit even a single word, force it on this line
+      // but truncate it to fit the width
+      if (wordIndex === 0 && remainingWords.length > 0) {
+        // Just take the first word and truncate it if needed
+        const word = remainingWords[0];
+        line = word;
+        wordIndex = 1;
+        
+        // Check if the single word is too long and needs truncation
+        const metrics = ctx.measureText(word);
+        if (metrics.width > maxWidth) {
+          // This shouldn't happen with proper font size calculation,
+          // but we'll handle it just in case
+          let truncated = word;
+          while (ctx.measureText(truncated).width > maxWidth && truncated.length > 1) {
+            truncated = truncated.substring(0, truncated.length - 1);
+          }
+          line = truncated;
+        }
+      }
+      
+      // Add the line and remove the used words
+      lines.push(line);
+      remainingWords = remainingWords.slice(wordIndex);
+      lineCount++;
     }
     
-    lines.push(line);
-    
-    // Limit to maxLines
-    const limitedLines = lines.slice(0, maxLines);
-    
     // Calculate total height to center vertically within the area
-    const totalHeight = limitedLines.length * lineHeight;
+    const totalHeight = lines.length * lineHeight;
     const startY = y - (totalHeight / 2) + (lineHeight / 2);
     
     // Draw each line
-    for (let i = 0; i < limitedLines.length; i++) {
+    for (let i = 0; i < lines.length; i++) {
       // Draw the stroke first (if needed)
-      ctx.strokeText(limitedLines[i], x, startY + (i * lineHeight));
+      ctx.strokeText(lines[i], x, startY + (i * lineHeight));
       // Then draw the fill
-      ctx.fillText(limitedLines[i], x, startY + (i * lineHeight));
+      ctx.fillText(lines[i], x, startY + (i * lineHeight));
     }
   }
   
@@ -226,21 +268,24 @@
     // Draw template image
     ctx.drawImage(templateImage, 0, 0, width, height);
     
-    // Draw title text - Calculate optimal font size for 300dpi
+    // Draw title text - Calculate optimal font size for 300dpi or use custom size
     const maxTitleFontSize = Math.round(75 * scaleFactor);
     const titleBoxWidth = 3148; // Fixed width for title box (in pixels)
     const titleBoxHeight = 800; // Fixed height for title box (in pixels)
     
-    const titleFontSize = calculateOptimalFontSize(
-      ctx,
-      title,
-      maxTitleFontSize,
-      titleBoxWidth,
-      titleBoxHeight,
-      2
-    );
+    // Use provided font size if available, otherwise calculate optimal size
+    const calculatedTitleFontSize = titleFontSize !== null 
+      ? Math.min(titleFontSize, maxTitleFontSize) // Ensure it doesn't exceed max
+      : calculateOptimalFontSize(
+          ctx,
+          title,
+          maxTitleFontSize,
+          titleBoxWidth,
+          titleBoxHeight,
+          2
+        );
     
-    ctx.font = `bold ${titleFontSize}pt Montserrat, Arial, sans-serif`;
+    ctx.font = `bold ${calculatedTitleFontSize}pt Montserrat, Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -260,7 +305,7 @@
     ctx.fillStyle = 'white';
     
     // Wrap text with calculated font size - scale line height for higher DPI
-    wrapText(ctx, title, titleX, titleY, titleBoxWidth, titleFontSize * 1.2, 2);
+    wrapText(ctx, title, titleX, titleY, titleBoxWidth, calculatedTitleFontSize * 1.2, 2);
     
     // Draw price text - Calculate optimal font size for 300dpi
     const maxPriceFontSize = Math.round(160 * scaleFactor);
