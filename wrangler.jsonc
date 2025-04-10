@@ -6,8 +6,5 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "lt-cf-sign-generator",
 	"compatibility_date": "2025-04-10",	
-  "pages_build_output_dir": ".svelte-kit/cloudflare",
-	"observability": {
-		"enabled": false
-	}
+  "pages_build_output_dir": ".svelte-kit/cloudflare"
 }
