@@ -24,7 +24,7 @@
     console.log('Form submitted with:', { title, price, sku, templatePath });
   }
   
-  // Function to lookup SKU in Magento
+  // Function to lookup SKU in Magento via our server-side API
   async function lookupSku() {
     if (!sku.trim()) {
       errorMessage = 'Please enter a SKU';
@@ -37,56 +37,22 @@
     isLoading = true;
     
     try {
-      // GraphQL query to fetch product data
-      const query = `
-        query GetProductBySku($sku: String!) {
-          products(filter: { sku: { eq: $sku } }) {
-            items {
-              name
-              sku
-              price_range {
-                minimum_price {
-                  regular_price {
-                    value
-                    currency
-                  }
-                }
-              }
-            }
-          }
-        }
-      `;
-      
-      // Variables for the query
-      const variables = { sku };
-      
-      // Fetch data from Magento GraphQL endpoint
-      const response = await fetch('https://angelesmillwork.com/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query, variables }),
-      });
+      // Call our server-side API instead of Magento directly
+      const response = await fetch(`/api/${encodeURIComponent(sku)}`);
       
       if (!response.ok) {
-        throw new Error(`Network error: ${response.status} ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
       
       const result = await response.json();
       
-      // Check for GraphQL errors
-      if (result.errors) {
-        throw new Error(result.errors[0].message || 'GraphQL error occurred');
-      }
-      
-      // Check if we got product data
-      if (!result.data?.products?.items?.length) {
-        throw new Error(`No product found with SKU: ${sku}`);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch product data');
       }
       
       // Extract product data
-      const product = result.data.products.items[0];
+      const product = result.product;
       const productPrice = product.price_range.minimum_price.regular_price;
       
       // Update form values
