@@ -181,7 +181,7 @@
   
   // Function to wrap text to fit within maxWidth
   function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number = 2) {
-    const words = text.split(' ');
+    const words = text.toUpperCase().split(' ');
     let line = '';
     const lines: string[] = [];
     
@@ -308,11 +308,11 @@
     
     // Position SKU in the middle of the page horizontally with the same Y position
     const skuX = width / 2;
-    const skuY = height - (20 * scaleFactor);
+    const skuY = height - (60 * scaleFactor);
     
     // Fill with black
     ctx.fillStyle = 'black';
-    ctx.fillText(`${sku}`, skuX, skuY);
+    ctx.fillText(`${sku.toUpperCase()}`, skuX, skuY);
   }
 </script>
 
