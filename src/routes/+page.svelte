@@ -6,6 +6,9 @@
   let price = '$9.99';
   let sku = 'ABC123';
   let templatePath = '/img/template.jpg';
+  // Whether the selected template includes a UPC barcode
+  let showBarcode = false;
+  let selectedTemplateIndex = 0;
   // New state for custom title font size
   let titleFontSize: number | null = null;
   
@@ -16,9 +19,19 @@
   
   // Available templates (you can expand this list)
   const templates = [
-    { name: 'Default Template', path: '/img/template.jpg' },
+    { name: 'Default', path: '/img/template.jpg', showBarcode: false },
+    { name: 'Default (With Barcode)', path: '/img/template.jpg', showBarcode: true },
     // Add more templates as needed
   ];
+
+  function handleTemplateChange(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const idx = parseInt(select.value, 10);
+    selectedTemplateIndex = idx;
+    const tpl = templates[idx];
+    templatePath = tpl.path;
+    showBarcode = tpl.showBarcode;
+  }
   
   // Handle form submission (e.g., for saving/printing)
   function handleSubmit() {
@@ -78,6 +91,8 @@
     price = '$9.99';
     sku = 'ABC123';
     templatePath = templates[0].path;
+    showBarcode = templates[0].showBarcode;
+    selectedTemplateIndex = 0;
     titleFontSize = null; // Reset to auto font size
     errorMessage = '';
     successMessage = '';
@@ -227,11 +242,12 @@
             </label>
             <select
               id="template"
-              bind:value={templatePath}
+              bind:value={selectedTemplateIndex}
+              on:change={handleTemplateChange}
               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             >
-              {#each templates as template}
-                <option value={template.path}>{template.name}</option>
+              {#each templates as template, i}
+                <option value={i}>{template.name}</option>
               {/each}
             </select>
           </div>
@@ -257,7 +273,7 @@
       <!-- Preview Column -->
       <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-lg font-medium text-gray-800 mb-4">Preview</h2>
-        <CanvasPreview {title} {price} {sku} {templatePath} {titleFontSize} />
+        <CanvasPreview {title} {price} {sku} {templatePath} {showBarcode} {titleFontSize} />
       </div>
     </div>
   </div>

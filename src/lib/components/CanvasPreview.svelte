@@ -8,6 +8,8 @@
   export let price: string = '';
   export let sku: string = '';
   export let templatePath: string = '/img/template/template.jpg';
+  // Whether to render the Code 39 barcode ("With UPC" layout)
+  export let showBarcode: boolean = false;
   // New prop for custom title font size (null means use auto-calculated size)
   export let titleFontSize: number | null = null;
   
@@ -16,6 +18,7 @@
   let ctx: CanvasRenderingContext2D | null;
   let templateImage: HTMLImageElement;
   let fontLoaded = false;
+  let barcodeFontLoaded = false;
   
   // Canvas dimensions (11x8.5 inches at 300dpi, landscape orientation)
   const dpi = 300;
@@ -29,11 +32,17 @@
   onMount(async () => {
     if (!browser) return;
     
-    // Use a safer approach to ensure Montserrat font is loaded
+    // Load Montserrat font
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap';
     document.head.appendChild(link);
+
+    // Load Libre Barcode 39 (Code 39 barcode font)
+    const barcodeLink = document.createElement('link');
+    barcodeLink.rel = 'stylesheet';
+    barcodeLink.href = 'https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap';
+    document.head.appendChild(barcodeLink);
     
     // Wait for fonts to load
     await document.fonts.ready;
@@ -42,9 +51,21 @@
     if (document.fonts.check('bold 16px Montserrat')) {
       fontLoaded = true;
     } else {
-      // Fallback to system fonts if Montserrat is not available
       console.warn('Montserrat font not available, using system fonts');
       fontLoaded = true; // Still proceed with drawing
+    }
+
+    // Check if Libre Barcode 39 is available
+    if (document.fonts.check('16px "Libre Barcode 39"')) {
+      barcodeFontLoaded = true;
+    } else {
+      // Force-load by measuring a test character, then re-check
+      try {
+        await document.fonts.load('40px "Libre Barcode 39"');
+        barcodeFontLoaded = true;
+      } catch (e) {
+        console.warn('Libre Barcode 39 font not available');
+      }
     }
     
     // Load template image
@@ -347,17 +368,44 @@
       1
     );
     
-    ctx.font = `bold ${skuFontSize}pt Montserrat, Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    
-    // Position SKU in the middle of the page horizontally with the same Y position
-    const skuX = width / 2;
-    const skuY = height - (60 * scaleFactor);
-    
-    // Fill with black
-    ctx.fillStyle = 'black';
-    ctx.fillText(`${sku.toUpperCase()}`, skuX, skuY);
+    const barcodeMarginX = Math.round(40 * scaleFactor);
+    const barcodeMarginY = Math.round(10 * scaleFactor);
+
+    if (showBarcode) {
+      // "With UPC" layout:
+      // - SKU label right-aligned just above the barcode
+      // - Code 39 barcode in bottom-right corner
+      const barcodeFontSize = Math.round(48 * scaleFactor);
+
+      // Measure barcode height to position SKU label above it
+      ctx.font = `${barcodeFontSize}pt "Libre Barcode 39"`;
+      const barcodeMetrics = ctx.measureText(`*${sku.toUpperCase()}*`);
+      const barcodeHeight = barcodeMetrics.actualBoundingBoxAscent + barcodeMetrics.actualBoundingBoxDescent;
+
+      // Draw SKU label above the barcode
+      ctx.font = `bold ${skuFontSize}pt Montserrat, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = 'black';
+      const labelGap = Math.round(8 * scaleFactor);
+      ctx.fillText(sku.toUpperCase(), width/2, height - 340 * scaleFactor);
+
+      // Draw barcode
+      if (barcodeFontLoaded) {
+        ctx.font = `${barcodeFontSize}pt "Libre Barcode 39"`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'black';
+        ctx.fillText(`*${sku.toUpperCase()}*`, width - barcodeMarginX, height - barcodeMarginY);
+      }
+    } else {
+      // Default layout: SKU text only, bottom-right corner
+      ctx.font = `bold ${skuFontSize}pt Montserrat, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = 'black';
+      ctx.fillText(sku.toUpperCase(), width/2, height - 30 * scaleFactor);
+    }
   }
 </script>
 
@@ -366,6 +414,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap" rel="stylesheet">
 </svelte:head>
 
 <div class="canvas-container">
