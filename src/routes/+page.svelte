@@ -1,5 +1,20 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import CanvasPreview from '$lib/components/CanvasPreview.svelte';
+
+  type TemplateMode = 'default' | 'sale-image';
+  type TemplateOption = {
+    name: string;
+    path: string;
+    showBarcode: boolean;
+    mode: TemplateMode;
+  };
+  type MagentoImage = {
+    url: string;
+    label?: string;
+    position?: number;
+    disabled?: boolean;
+  };
   
   // Form state
   let title = 'Product Name';
@@ -8,9 +23,15 @@
   let templatePath = '/img/template.jpg';
   // Whether the selected template includes a UPC barcode
   let showBarcode = false;
+  let templateMode: TemplateMode = 'default';
   let selectedTemplateIndex = 0;
   // New state for custom title font size
   let titleFontSize: number | null = null;
+  let originalPrice = '';
+  let saleImageSrc = '';
+  let uploadedImageSrc = '';
+  let magentoImages: MagentoImage[] = [];
+  let saleImageScale = 1.0;
   
   // Status state for API requests
   let isLoading = false;
@@ -18,11 +39,20 @@
   let successMessage = '';
   
   // Available templates (you can expand this list)
-  const templates = [
-    { name: 'Default', path: '/img/template.jpg', showBarcode: false },
-    { name: 'Default (With Barcode)', path: '/img/template.jpg', showBarcode: true },
+  const templates: TemplateOption[] = [
+    { name: 'Default', path: '/img/template.jpg', showBarcode: false, mode: 'default' },
+    { name: 'Default (With Barcode)', path: '/img/template.jpg', showBarcode: true, mode: 'default' },
+    { name: 'On Sale w/Image', path: '/img/template.jpg', showBarcode: false, mode: 'sale-image' },
     // Add more templates as needed
   ];
+
+  // Decode HTML entities (e.g. &quot; → ") that Magento includes in product names
+  function decodeHtmlEntities(html: string): string {
+    if (!html) return html;
+    const txt = document.createElement('textarea');
+    txt.innerHTML = html;
+    return txt.value;
+  }
 
   function handleTemplateChange(event: Event) {
     const select = event.target as HTMLSelectElement;
@@ -31,6 +61,29 @@
     const tpl = templates[idx];
     templatePath = tpl.path;
     showBarcode = tpl.showBarcode;
+    templateMode = tpl.mode;
+
+    // Default to first Magento image when entering this template.
+    if (templateMode === 'sale-image' && !saleImageSrc && magentoImages.length > 0) {
+      saleImageSrc = magentoImages[0].url;
+    }
+  }
+
+  function handleImageUpload(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (uploadedImageSrc) {
+      URL.revokeObjectURL(uploadedImageSrc);
+    }
+
+    uploadedImageSrc = URL.createObjectURL(file);
+    saleImageSrc = uploadedImageSrc;
+  }
+
+  function selectMagentoImage(url: string) {
+    saleImageSrc = url;
   }
   
   // Handle form submission (e.g., for saving/printing)
@@ -68,11 +121,28 @@
       
       // Extract product data
       const product = result.product;
-      const productPrice = product.price_range.minimum_price.regular_price;
+      const minimumPrice = product.price_range?.minimum_price;
+      const regularValue = Number(minimumPrice?.regular_price?.value ?? 0);
+      const finalValue = Number(minimumPrice?.final_price?.value ?? regularValue);
+
+      const rawGallery = Array.isArray(product.media_gallery) ? product.media_gallery : [];
+      magentoImages = rawGallery
+        .filter((item: MagentoImage) => !!item?.url && !item?.disabled)
+        .sort((a: MagentoImage, b: MagentoImage) => (a.position ?? 0) - (b.position ?? 0));
       
-      // Update form values
-      title = product.name;
-      price = `$${productPrice.value.toFixed(2)}`;
+      // Update form values — decode HTML entities from Magento (e.g. &quot; → ")
+      title = decodeHtmlEntities(product.name);
+      if (finalValue > 0 && regularValue > 0 && finalValue < regularValue) {
+        originalPrice = `$${regularValue.toFixed(2)}`;
+        price = `$${finalValue.toFixed(2)}`;
+      } else {
+        originalPrice = '';
+        price = `$${regularValue.toFixed(2)}`;
+      }
+
+      if (templateMode === 'sale-image' && !uploadedImageSrc) {
+        saleImageSrc = magentoImages[0]?.url ?? '';
+      }
       
       // Show success message
       successMessage = 'Product information loaded successfully!';
@@ -87,16 +157,32 @@
 
   // Reset form to defaults
   function resetForm() {
+    if (uploadedImageSrc) {
+      URL.revokeObjectURL(uploadedImageSrc);
+    }
+
     title = 'Product Name';
     price = '$9.99';
     sku = 'ABC123';
     templatePath = templates[0].path;
     showBarcode = templates[0].showBarcode;
+    templateMode = templates[0].mode;
     selectedTemplateIndex = 0;
     titleFontSize = null; // Reset to auto font size
+    originalPrice = '';
+    saleImageSrc = '';
+    uploadedImageSrc = '';
+    magentoImages = [];
+    saleImageScale = 1.0;
     errorMessage = '';
     successMessage = '';
   }
+
+  onDestroy(() => {
+    if (uploadedImageSrc) {
+      URL.revokeObjectURL(uploadedImageSrc);
+    }
+  });
 </script>
 
 <div class="min-h-screen bg-gray-50 py-8">
@@ -199,6 +285,24 @@
               This will appear in large black text
             </p>
           </div>
+
+          {#if templateMode === 'sale-image'}
+            <div>
+              <label for="originalPrice" class="block text-sm font-medium text-gray-700 mb-1">
+                Original Price
+              </label>
+              <input
+                id="originalPrice"
+                type="text"
+                bind:value={originalPrice}
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="$0.00"
+              />
+              <p class="mt-1 text-xs text-gray-500">
+                Drawn above price with a strikethrough for on-sale signs
+              </p>
+            </div>
+          {/if}
           
           <div>
             <label for="sku" class="block text-sm font-medium text-gray-700 mb-1">
@@ -251,6 +355,61 @@
               {/each}
             </select>
           </div>
+
+          {#if templateMode === 'sale-image'}
+            <div class="space-y-3">
+              <div>
+                <label for="saleImageUpload" class="block text-sm font-medium text-gray-700 mb-1">
+                  Product Image Upload
+                </label>
+                <input
+                  id="saleImageUpload"
+                  type="file"
+                  accept="image/*"
+                  on:change={handleImageUpload}
+                  class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:border-0 file:rounded-md file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+              </div>
+
+              {#if magentoImages.length > 0}
+                <div>
+                  <p class="text-sm font-medium text-gray-700 mb-2">Magento Gallery</p>
+                  <div class="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto rounded border border-gray-200 p-2">
+                    {#each magentoImages as image}
+                      <button
+                        type="button"
+                        class={`h-20 rounded border overflow-hidden ${saleImageSrc === image.url ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200'}`}
+                        on:click={() => selectMagentoImage(image.url)}
+                        title={image.label || 'Magento image'}
+                      >
+                        <img src={image.url} alt={image.label || 'Magento image'} class="h-full w-full object-cover" />
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {:else}
+                <p class="text-xs text-gray-500">Run SKU lookup to load Magento gallery images.</p>
+              {/if}
+
+              <div>
+                <label for="saleImageScale" class="block text-sm font-medium text-gray-700 mb-1">
+                  Image Scale <span class="text-gray-400 font-normal">{saleImageScale.toFixed(2)}×</span>
+                </label>
+                <input
+                  id="saleImageScale"
+                  type="range"
+                  min="0.25"
+                  max="3"
+                  step="0.05"
+                  bind:value={saleImageScale}
+                  class="w-full accent-indigo-600"
+                />
+                <div class="flex justify-between text-xs text-gray-400 mt-0.5">
+                  <span>0.25×</span><span>1×</span><span>3×</span>
+                </div>
+              </div>
+            </div>
+          {/if}
           
           <div class="flex gap-4">
             <button
@@ -273,7 +432,18 @@
       <!-- Preview Column -->
       <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-lg font-medium text-gray-800 mb-4">Preview</h2>
-        <CanvasPreview {title} {price} {sku} {templatePath} {showBarcode} {titleFontSize} />
+        <CanvasPreview
+          {title}
+          {price}
+          {sku}
+          {templatePath}
+          {showBarcode}
+          {titleFontSize}
+          {originalPrice}
+          {saleImageSrc}
+          useSaleImageTemplate={templateMode === 'sale-image'}
+          {saleImageScale}
+        />
       </div>
     </div>
   </div>

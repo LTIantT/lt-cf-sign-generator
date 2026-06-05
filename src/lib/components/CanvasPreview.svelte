@@ -12,11 +12,18 @@
   export let showBarcode: boolean = false;
   // New prop for custom title font size (null means use auto-calculated size)
   export let titleFontSize: number | null = null;
+  export let originalPrice: string = '';
+  export let saleImageSrc: string = '';
+  export let useSaleImageTemplate: boolean = false;
+  export let saleImageScale: number = 1.0;
   
   // Canvas element reference
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D | null;
-  let templateImage: HTMLImageElement;
+  let templateImage: HTMLImageElement | null = null;
+  let saleProductImage: HTMLImageElement | null = null;
+  let loadedTemplatePath = '';
+  let loadedSaleImageSrc = '';
   let fontLoaded = false;
   let barcodeFontLoaded = false;
   
@@ -68,13 +75,6 @@
       }
     }
     
-    // Load template image
-    templateImage = new Image();
-    templateImage.src = templatePath;
-    templateImage.onload = () => {
-      drawCanvas();
-    };
-    
     // Setup canvas context
     ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -82,15 +82,65 @@
     // Set canvas dimensions
     canvas.width = width;
     canvas.height = height;
+
+    loadTemplateImage(templatePath);
+    if (saleImageSrc) {
+      loadSaleProductImage(saleImageSrc);
+    }
   });
   
   // Update canvas when props change
   afterUpdate(() => {
     if (!browser) return;
-    if (ctx && templateImage && fontLoaded) {
+    if (!ctx || !fontLoaded) return;
+
+    if (templatePath !== loadedTemplatePath) {
+      loadTemplateImage(templatePath);
+      return;
+    }
+
+    if (saleImageSrc !== loadedSaleImageSrc) {
+      loadSaleProductImage(saleImageSrc);
+      return;
+    }
+
+    if (templateImage) {
       drawCanvas();
     }
   });
+
+  function loadTemplateImage(path: string) {
+    const img = new Image();
+    img.onload = () => {
+      templateImage = img;
+      loadedTemplatePath = path;
+      drawCanvas();
+    };
+    img.src = path;
+  }
+
+  function loadSaleProductImage(src: string) {
+    if (!src) {
+      saleProductImage = null;
+      loadedSaleImageSrc = '';
+      drawCanvas();
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      saleProductImage = img;
+      loadedSaleImageSrc = src;
+      drawCanvas();
+    };
+    img.onerror = () => {
+      saleProductImage = null;
+      loadedSaleImageSrc = src;
+      drawCanvas();
+    };
+    img.src = src;
+  }
 
   // Function to download the canvas as PDF
   function downloadAsPDF() {
@@ -281,7 +331,7 @@
   
   // Draw the canvas with template and text
   function drawCanvas() {
-    if (!ctx) return;
+    if (!ctx || !templateImage) return;
     
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
@@ -306,53 +356,57 @@
           2
         );
     
-    ctx.font = `bold ${calculatedTitleFontSize}pt Montserrat, Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Calculate position (center horizontally, positioned at 1/4 from top)
+    // Title position constants
     const titleX = width / 2;
     const titleY = height / 4.8;
 
-    // Slightly increase the separation between the letters for better stroke visibility
-    ctx.letterSpacing = '2px';
-    ctx.lineJoin = 'round';
-    
-    // Add black stroke - scale stroke width for higher DPI
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 10 * scaleFactor;
-    
-    // Fill with white
-    ctx.fillStyle = 'white';
-    
-    // Wrap text with calculated font size - scale line height for higher DPI
-    wrapText(ctx, title, titleX, titleY, titleBoxWidth, calculatedTitleFontSize * 1.2, 2);
-    
-    // Draw price text - Calculate optimal font size for 300dpi
-    const maxPriceFontSize = Math.round(160 * scaleFactor);
-    const priceBoxWidth = 3128; // Fixed width for price box (in pixels)
-    const priceBoxHeight = 832; // Fixed height for price box (in pixels)
-    
-    const priceFontSize = calculateOptimalFontSize(
-      ctx,
-      price,
-      maxPriceFontSize,
-      priceBoxWidth,
-      priceBoxHeight,
-      1
-    );
-    
-    ctx.font = `bold ${priceFontSize}pt Montserrat, Arial, sans-serif`;
+    const priceBoxWidth = 3128;
+    const priceBoxHeight = 832;
+
+    if (useSaleImageTemplate) {
+      // 1. Draw image area (white bg + product image, clipped to cell)
+      drawSaleImage(ctx, priceBoxWidth, priceBoxHeight);
+      // 2. Re-stamp the template top band so the red section layers above the product image
+      const topBand = Math.round(height * 0.38);
+      ctx.drawImage(templateImage, 0, 0, width, topBand, 0, 0, width, topBand);
+    }
+
+    // 3. Draw title text — after image so it is always on top
+    ctx.font = `bold ${calculatedTitleFontSize}pt Montserrat, Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // Calculate position (center horizontally, positioned at 2/3 from top)
-    const priceX = width / 2;
-    const priceY = height * 2/3;
-    
-    // Fill with black
-    ctx.fillStyle = 'black';
-    ctx.fillText(price, priceX, priceY);
+    ctx.letterSpacing = '2px';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 10 * scaleFactor;
+    ctx.fillStyle = 'white';
+    wrapText(ctx, title, titleX, titleY, titleBoxWidth, calculatedTitleFontSize * 1.2, 2);
+
+    if (useSaleImageTemplate) {
+      // 4. Draw price text on top of image area
+      drawSalePrices(ctx, priceBoxWidth, priceBoxHeight);
+    } else {
+      // Default template price rendering.
+      const maxPriceFontSize = Math.round(160 * scaleFactor);
+      const priceFontSize = calculateOptimalFontSize(
+        ctx,
+        price,
+        maxPriceFontSize,
+        priceBoxWidth,
+        priceBoxHeight,
+        1
+      );
+
+      ctx.font = `bold ${priceFontSize}pt Montserrat, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const priceX = width / 2;
+      const priceY = height * 2/3;
+
+      ctx.fillStyle = 'black';
+      ctx.fillText(price, priceX, priceY);
+    }
     
     // Draw SKU text - Calculate optimal font size for 300dpi
     const maxSkuFontSize = Math.round(16 * scaleFactor);
@@ -407,12 +461,116 @@
       ctx.fillText(sku.toUpperCase(), width/2, height - 30 * scaleFactor);
     }
   }
+
+  // Draws the white background and product image for the sale template (left 60% area).
+  // Clipped to the image cell so a scaled-up image doesn't bleed outside.
+  function drawSaleImage(ctx: CanvasRenderingContext2D, boxWidth: number, boxHeight: number) {
+    const areaX = (width - boxWidth) / 2;
+    const areaY = (height * 2 / 3) - (boxHeight / 2);
+    const imageWidth = Math.round(boxWidth * 0.6);
+    const imageX = areaX;
+    const imageY = areaY;
+    const imageHeight = boxHeight;
+
+    // Expand the image cell 25% outward in all directions without moving other elements
+    const expandX = imageWidth * 0.25;
+    const expandY = imageHeight * 0.25;
+    const imgCellX = imageX - expandX;
+    const imgCellY = imageY - expandY;
+    const imgCellW = imageWidth + expandX * 2;
+    const imgCellH = imageHeight + expandY * 2;
+
+    // White background for expanded image cell
+    ctx.fillStyle = 'white';
+    ctx.fillRect(imgCellX, imgCellY, imgCellW, imgCellH);
+
+    if (saleProductImage) {
+      const padding = Math.round(24 * scaleFactor);
+      const availableW = imgCellW - (padding * 2);
+      const availableH = imgCellH - (padding * 2);
+      // Apply user scale on top of the fit-to-cell scale, using cell center as origin
+      const fitScale = Math.min(availableW / saleProductImage.width, availableH / saleProductImage.height) * saleImageScale;
+      const drawW = saleProductImage.width * fitScale;
+      const drawH = saleProductImage.height * fitScale;
+      const drawX = imgCellX + ((imgCellW - drawW) / 2);
+      const drawY = imgCellY + ((imgCellH - drawH) / 2);
+      // Clip to image cell so scaled-up images don't overflow
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(imgCellX, imgCellY, imgCellW, imgCellH);
+      ctx.clip();
+      ctx.drawImage(saleProductImage, drawX, drawY, drawW, drawH);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#888';
+      ctx.font = `bold ${Math.round(24 * scaleFactor)}pt Montserrat, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('NO IMAGE', imgCellX + (imgCellW / 2), imgCellY + (imgCellH / 2));
+    }
+  }
+
+  // Draws the price text (and optional crossed-out original price) for the sale template (right 40% area).
+  function drawSalePrices(ctx: CanvasRenderingContext2D, boxWidth: number, boxHeight: number) {
+    const areaX = (width - boxWidth) / 2;
+    const areaY = (height * 2 / 3) - (boxHeight / 2);
+    const imageWidth = Math.round(boxWidth * 0.6);
+    const priceWidth = boxWidth - imageWidth;
+    const priceX = areaX + imageWidth;
+    const priceY = areaY;
+    const priceHeight = boxHeight;
+    const priceCenterX = priceX + (priceWidth / 2);
+
+    const saleValue = price.trim() || '$0.00';
+    const originalValue = originalPrice.trim();
+
+    if (originalValue) {
+      const maxOriginalSize = Math.round(64 * scaleFactor);
+      const originalFontSize = calculateOptimalFontSize(
+        ctx, originalValue, maxOriginalSize, priceWidth * 0.9, priceHeight * 0.25, 1
+      );
+      ctx.font = `bold ${originalFontSize}pt Montserrat, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#cc0000';
+      const originalY = priceY + (priceHeight * 0.30);
+      ctx.fillText(originalValue, priceCenterX, originalY);
+
+      const textMetrics = ctx.measureText(originalValue);
+      const strikeHalf = (textMetrics.width / 2) + Math.round(4 * scaleFactor);
+      ctx.strokeStyle = '#cc0000';
+      ctx.lineWidth = Math.max(2, Math.round(6 * scaleFactor));
+      ctx.beginPath();
+      ctx.moveTo(priceCenterX - strikeHalf, originalY);
+      ctx.lineTo(priceCenterX + strikeHalf, originalY);
+      ctx.stroke();
+
+      const maxSaleSize = Math.round(144 * scaleFactor);
+      const saleFontSize = calculateOptimalFontSize(
+        ctx, saleValue, maxSaleSize, priceWidth * 0.95, priceHeight * 0.5, 1
+      );
+      ctx.font = `bold ${saleFontSize}pt Montserrat, Arial, sans-serif`;
+      ctx.fillStyle = 'black';
+      ctx.fillText(saleValue, priceCenterX, priceY + (priceHeight * 0.73));
+      return;
+    }
+
+    const maxPriceSize = Math.round(160 * scaleFactor);
+    const priceFontSize = calculateOptimalFontSize(
+      ctx, saleValue, maxPriceSize, priceWidth * 0.95, priceHeight * 0.9, 1
+    );
+    ctx.font = `bold ${priceFontSize}pt Montserrat, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'black';
+    ctx.fillText(saleValue, priceCenterX, priceY + (priceHeight / 2));
+  }
 </script>
 
 <svelte:head>
   <!-- Preload the font to ensure it's available -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap" rel="stylesheet">
 </svelte:head>

@@ -17,36 +17,19 @@ export async function GET({ params }) {
   }
   
   try {
-    // GraphQL query to fetch product data
-    const query = `
-      query GetProductBySku($sku: String!) {
-        products(filter: { sku: { eq: $sku } }) {
-          items {
-            name
-            sku
-            price_range {
-              minimum_price {
-                regular_price {
-                  value
-                  currency
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
-    
-    // Variables for the query
-    const variables = { sku };
-    
+    // Use an inline query with the 'in' filter — Magento's 'eq' filter resolves to
+    // the configurable parent only, while 'in' returns all matching items (parent
+    // + simple children) so we can pick the exact SKU match server-side.
+    const skuSafe = sku.replace(/"/g, '');
+    const inlineQuery = `{ products(pageSize: 775, filter: { sku: { in: ["${skuSafe}"] } }) { items { id sku name description { html } price_range { minimum_price { regular_price { value currency } final_price { value currency } discount { amount_off percent_off } } maximum_price { regular_price { value currency } final_price { value currency } discount { amount_off percent_off } } } media_gallery { url label position disabled } } } }`;
+
     // Fetch data from Magento GraphQL endpoint
     const response = await fetch('https://angelesmillwork.com/graphql', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query, variables }),
+      body: JSON.stringify({ query: inlineQuery }),
     });
     
     if (!response.ok) {
@@ -91,12 +74,30 @@ export async function GET({ params }) {
         }
       );
     }
+
+    // Filter to exact SKU match — configurable parents may also appear in results
+    const exactMatch = result.data.products.items.find(
+      (item) => item.sku?.toLowerCase() === sku.toLowerCase()
+    );
+
+    if (!exactMatch) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `No product found with SKU: ${sku}` 
+        }), 
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
     
     // Return the product data
     return new Response(
       JSON.stringify({ 
         success: true, 
-        product: result.data.products.items[0] 
+        product: exactMatch 
       }), 
       {
         status: 200,
@@ -106,11 +107,12 @@ export async function GET({ params }) {
     
   } catch (error) {
     console.error('Error fetching product:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || 'An unknown error occurred' 
+        error: errorMessage 
       }), 
       {
         status: 500,
