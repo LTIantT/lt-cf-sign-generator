@@ -447,16 +447,6 @@
       const skuLabelY = height - 340 * scaleFactor;
       ctx.fillText(sku.toUpperCase(), width/2, skuLabelY);
 
-      // Draw optional instructional text below the SKU label
-      if (instructionalText.trim()) {
-        const instructionalFontSize = Math.round(14 * scaleFactor);
-        ctx.font = `bold ${instructionalFontSize}pt Montserrat, Arial, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillStyle = 'black';
-        ctx.fillText(instructionalText.toUpperCase(), width/2, skuLabelY + Math.round(10 * scaleFactor));
-      }
-
       // Draw barcode
       if (barcodeFontLoaded) {
         ctx.font = `${barcodeFontSize}pt "Libre Barcode 39"`;
@@ -464,6 +454,17 @@
         ctx.textBaseline = 'bottom';
         ctx.fillStyle = 'black';
         ctx.fillText(`*${sku.toUpperCase()}*`, width - barcodeMarginX, height - barcodeMarginY);
+      }
+
+      // Draw optional instructional text right-justified just above the barcode
+      if (instructionalText.trim()) {
+        const instructionalFontSize = Math.round(14 * scaleFactor);
+        ctx.font = `bold ${instructionalFontSize}pt Montserrat, Arial, sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'black';
+        const instructionalGap = Math.round(10 * scaleFactor);
+        ctx.fillText(instructionalText.toUpperCase(), width - barcodeMarginX, height - barcodeMarginY - barcodeHeight - instructionalGap);
       }
     } else {
       // Default layout: SKU text only, bottom-right corner
