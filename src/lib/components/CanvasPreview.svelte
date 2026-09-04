@@ -13,6 +13,8 @@
   // New prop for custom title font size (null means use auto-calculated size)
   export let titleFontSize: number | null = null;
   export let originalPrice: string = '';
+  // Optional line of text shown below the SKU when the barcode layout is used
+  export let instructionalText: string = '';
   export let saleImageSrc: string = '';
   export let useSaleImageTemplate: boolean = false;
   export let saleImageScale: number = 1.0;
@@ -442,7 +444,18 @@
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = 'black';
       const labelGap = Math.round(8 * scaleFactor);
-      ctx.fillText(sku.toUpperCase(), width/2, height - 340 * scaleFactor);
+      const skuLabelY = height - 340 * scaleFactor;
+      ctx.fillText(sku.toUpperCase(), width/2, skuLabelY);
+
+      // Draw optional instructional text below the SKU label
+      if (instructionalText.trim()) {
+        const instructionalFontSize = Math.round(14 * scaleFactor);
+        ctx.font = `bold ${instructionalFontSize}pt Montserrat, Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = 'black';
+        ctx.fillText(instructionalText.toUpperCase(), width/2, skuLabelY + Math.round(10 * scaleFactor));
+      }
 
       // Draw barcode
       if (barcodeFontLoaded) {
