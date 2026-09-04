@@ -15,6 +15,7 @@
   export let originalPrice: string = '';
   // Optional line of text shown below the SKU when the barcode layout is used
   export let instructionalText: string = '';
+  export let instructionalTextColor: string = '#000000';
   export let saleImageSrc: string = '';
   export let useSaleImageTemplate: boolean = false;
   export let saleImageScale: number = 1.0;
@@ -462,8 +463,8 @@
         ctx.font = `bold ${instructionalFontSize}pt Montserrat, Arial, sans-serif`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
-        ctx.fillStyle = 'black';
-        const instructionalGap = Math.round(10 * scaleFactor);
+        ctx.fillStyle = instructionalTextColor;
+        const instructionalGap = Math.round(25 * scaleFactor);
         ctx.fillText(instructionalText.toUpperCase(), width - barcodeMarginX, height - barcodeMarginY - barcodeHeight - instructionalGap);
       }
     } else {

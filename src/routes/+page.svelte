@@ -34,6 +34,7 @@
   let saleImageScale = 1.0;
   // Optional line of text shown below the SKU on barcode templates
   let instructionalText = '';
+  let instructionalTextColor = '#000000';
   
   // Status state for API requests
   let isLoading = false;
@@ -177,6 +178,7 @@
     magentoImages = [];
     saleImageScale = 1.0;
     instructionalText = '';
+    instructionalTextColor = '#000000';
     errorMessage = '';
     successMessage = '';
   }
@@ -348,13 +350,22 @@
               <label for="instructionalText" class="block text-sm font-medium text-gray-700 mb-1">
                 Instructional Text
               </label>
-              <input
-                id="instructionalText"
-                type="text"
-                bind:value={instructionalText}
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="e.g. Price valid while supplies last"
-              />
+              <div class="flex gap-2 items-center">
+                <input
+                  id="instructionalText"
+                  type="text"
+                  bind:value={instructionalText}
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="e.g. Price valid while supplies last"
+                />
+                <input
+                  id="instructionalTextColor"
+                  type="color"
+                  bind:value={instructionalTextColor}
+                  class="h-10 w-12 p-1 border border-gray-300 rounded-md shadow-sm cursor-pointer"
+                  title="Instructional text color"
+                />
+              </div>
               <p class="mt-1 text-xs text-gray-500">
                 Optional line shown below the SKU, above the barcode
               </p>
@@ -462,6 +473,7 @@
           {titleFontSize}
           {originalPrice}
           {instructionalText}
+          {instructionalTextColor}
           {saleImageSrc}
           useSaleImageTemplate={templateMode === 'sale-image'}
           {saleImageScale}
